@@ -1,4 +1,3 @@
-import '@webcomponents/scoped-custom-element-registry';
 import { dedupeMixin } from '@open-wc/dedupe-mixin';
 import { adoptStyles } from '@lit/reactive-element/css-tag.js';
 
@@ -94,12 +93,19 @@ const ScopedElementsMixinImplementation = superclass =>
         elementStyles,
       } = /** @type {typeof ScopedElementsHost} */ (this.constructor);
 
+      let hasScopedRegistry = true;
       if (!this.registry) {
-        this.registry = new CustomElementRegistry();
-
-        Object.entries(scopedElements).forEach(([tagName, klass]) =>
-          this.registry.define(tagName, klass),
-        );
+        try {
+          this.registry = new CustomElementRegistry();
+        } catch (error) {
+          this.registry = customElements;
+          hasScopedRegistry = false;
+        }
+        for (const [tagName, klass] of Object.entries(scopedElements)) {
+          if (!this.registry.get(tagName)) {
+            this.registry.define(tagName, klass);
+          }
+        }
       }
 
       /** @type {ShadowRootInit} */
@@ -109,16 +115,27 @@ const ScopedElementsMixinImplementation = superclass =>
         customElements: this.registry,
       };
 
-      this.renderOptions.creationScope = this.attachShadow(options);
-
-      if (this.renderOptions.creationScope instanceof ShadowRoot) {
-        adoptStyles(this.renderOptions.creationScope, elementStyles);
-
-        this.renderOptions.renderBefore =
-          this.renderOptions.renderBefore || this.renderOptions.creationScope.firstChild;
+      const createdRoot = this.attachShadow(options);
+      if (hasScopedRegistry) {
+        this.renderOptions.creationScope = createdRoot;
       }
 
-      return this.renderOptions.creationScope;
+      if (createdRoot instanceof ShadowRoot) {
+        adoptStyles(createdRoot, elementStyles);
+        this.renderOptions.renderBefore = this.renderOptions.renderBefore || createdRoot.firstChild;
+      }
+
+      return createdRoot;
+
+      // const foo =  this.attachShadow(options);
+      //        if (foo instanceof ShadowRoot) {
+      //   adoptStyles(foo, elementStyles);
+
+      //   this.renderOptions.renderBefore =
+      //     this.renderOptions.renderBefore || foo.firstChild;
+      // }
+
+      // return foo;
     }
 
     /**
